@@ -1,0 +1,47 @@
+name: Pubblica la lámina del sabato
+
+# Ogni sabato pubblica sul sito la lámina programmata (ES, EN, IT) poco prima
+# del post sui social delle 10:30. Le lámine future restano nel ramo
+# `programmati` e non sono online finché non arriva la loro data.
+# Gli orari sono in UTC: 07:30 e 08:30 UTC coprono le 09:30 di Madrid sia con
+# l'ora solare sia con l'ora legale; il passaggio delle 09:15 UTC è di riserva.
+on:
+  schedule:
+    - cron: "30 7 * * 6"
+    - cron: "30 8 * * 6"
+    - cron: "15 9 * * 6"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pubblica-laminas
+  cancel-in-progress: false
+
+jobs:
+  pubblica:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Prendi le lámine programmate
+        run: |
+          git fetch --depth 1 origin programmati
+          mkdir -p /tmp/programmati
+          git archive FETCH_HEAD laminas | tar -x -C /tmp/programmati
+
+      - name: Pubblica quelle arrivate alla data
+        id: pubblica
+        run: python3 scripts/pubblica_lamina.py /tmp/programmati/laminas
+
+      - name: Salva e pubblica il sito
+        if: steps.pubblica.outputs.published != ''
+        run: |
+          git config user.name "cuorigentili-bot"
+          git config user.email "giuligattuso-bit@users.noreply.github.com"
+          git add -A descargas en it
+          git commit -m "Lámina del sabato: ${{ steps.pubblica.outputs.published }}"
+          git push origin HEAD:main
