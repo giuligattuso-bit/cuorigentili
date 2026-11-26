@@ -1,15 +1,13 @@
-name: Pubblica la lámina del sabato
+name: Pubblica lámine e regali programmati
 
 # Ogni sabato pubblica sul sito la lámina programmata (ES, EN, IT) poco prima
 # del post sui social delle 10:30. Le lámine future restano nel ramo
 # `programmati` e non sono online finché non arriva la loro data.
-# Gli orari sono in UTC: 07:30 e 08:30 UTC coprono le 09:30 di Madrid sia con
-# l'ora solare sia con l'ora legale; il passaggio delle 09:15 UTC è di riserva.
+# Controlla ogni 10 minuti: ogni contenuto ha la sua ora di uscita (ora di Madrid)
+# nel manifest, di solito una ventina di minuti prima del post sui social.
 on:
   schedule:
-    - cron: "30 7 * * 6"
-    - cron: "30 8 * * 6"
-    - cron: "15 9 * * 6"
+    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 permissions:

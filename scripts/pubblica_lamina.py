@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pubblica sul sito le lámine programmate la cui ora di uscita è passata.
+"""Pubblica sul sito le lámine e i regali programmati la cui ora di uscita è passata.
 
 Legge laminas/manifest.json e i file in laminas/files/<data>/ (copiati dal ramo
 `programmati` dal workflow), copia i file al loro posto nel sito e aggiunge la
@@ -35,15 +35,20 @@ SVG = ('<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="curr
        '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>')
 
 
-def card(date, lang, info):
+def card(date, lang, info, kind="lamina"):
     p = PAGES[lang]
     rel = lambda path: path[len(p["base"]):] if path.startswith(p["base"]) else "/" + path
     title = escape(info["title"])
-    return (
-        f'<article class="cg-dl-card" id="lamina-semana" data-lamina="{date}">\n'
+    if kind == "lamina":
+        head = f'<article class="cg-dl-card" id="lamina-semana" data-lamina="{date}">\n'
+        meta = f'{p["weekly"]} · {p["meta"]}'
+    else:
+        head = f'<article class="cg-dl-card" id="regalo-{date}" data-regalo="{date}">\n'
+        meta = info.get("meta", p["meta"])
+    return head + (
         f'<div class="cg-dl-thumb"><img src="{rel(info["img"])}" alt="{p["alt"]}{title}" width="828" height="1171" loading="lazy"></div>\n'
         f'<div class="cg-dl-body">\n'
-        f'<p class="cg-dl-meta">{p["weekly"]} · {p["meta"]}</p>\n'
+        f'<p class="cg-dl-meta">{meta}</p>\n'
         f'<h2>{title}</h2>\n'
         f'<p class="cg-p">{escape(info["desc"])}</p>\n'
         f'<div class="cg-btns"><a class="cg-btn" href="{rel(info["pdf"])}" download>{SVG}{p["btn"]}</a></div>\n'
@@ -51,11 +56,16 @@ def card(date, lang, info):
     )
 
 
-def add_card(lang, date, info):
+def add_card(lang, date, info, kind="lamina"):
     p = PAGES[lang]
     html = open(p["page"], encoding="utf-8").read()
-    if f'data-lamina="{date}"' in html:
+    if f'data-{kind}="{date}"' in html:
         return False
+    if kind != "lamina":
+        marker = '<div class="cg-dl-grid">\n'
+        html = html.replace(marker, marker + card(date, lang, info, kind), 1)
+        open(p["page"], "w", encoding="utf-8").write(html)
+        return True
     # la lámina precedente perde l'etichetta "della settimana" e l'ancora #lamina-semana
     html = re.sub(r'id="lamina-semana" data-lamina="([\d-]+)"', r'id="lamina-\1" data-lamina="\1"', html)
     html = html.replace(f'{p["weekly"]} · {p["meta"]}', p["meta"])
@@ -74,10 +84,13 @@ def main():
     manifest = json.load(open(os.path.join(src, "manifest.json"), encoding="utf-8"))
     published = []
     for entry in sorted(manifest, key=lambda e: e["date"]):
-        release = dt.datetime.combine(dt.date.fromisoformat(entry["date"]), RELEASE_TIME, MADRID)
+        if entry.get("release"):  # es. "2026-12-07T20:10": pochi minuti prima del post social
+            release = dt.datetime.fromisoformat(entry["release"]).replace(tzinfo=MADRID)
+        else:
+            release = dt.datetime.combine(dt.date.fromisoformat(entry["date"]), RELEASE_TIME, MADRID)
         if release > now:
             continue
-        files = os.path.join(src, "files", entry["date"])
+        files = os.path.join(src, "files", entry.get("dir", entry["date"]))
         if not os.path.isdir(files):
             continue
         changed = False
@@ -88,7 +101,7 @@ def main():
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
                     shutil.copy2(os.path.join(files, dst), dst)
                     changed = True
-            changed |= add_card(lang, entry["date"], info)
+            changed |= add_card(lang, entry["date"], info, entry.get("kind", "lamina"))
         if changed:
             published.append(entry["date"])
     print("Pubblicate:", ", ".join(published) if published else "nessuna")
